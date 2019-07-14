@@ -6,7 +6,7 @@ This repository contains a portion of the many, many scripts I have written and 
 
 ## Organization
 ---
-The LAMMPS scripts and data files are organized by chapter and then by methodology stage. The MAC/GMC files will under chapter 4. The Python and R scripts are largely independent of chapter and so are in their own folders at the root of the repository. 
+The LAMMPS scripts and data files are organized by chapter and then by methodology stage. The MAC/GMC files will be under chapter 4. The Python and R scripts are largely independent of chapter and so are in their own folders at the root of the repository. 
 
 ## Why is Chapter 5 devoid of life?
 ---
