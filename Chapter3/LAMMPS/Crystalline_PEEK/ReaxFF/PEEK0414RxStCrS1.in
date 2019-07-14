@@ -1,0 +1,38 @@
+#This script starts off the crystalline PEEK sample 1 in ReaxFF after 29 ns of equilibration in OPLS. It will increase the temp from 3 K to 300 K using NPT ensemble. Using 1 processor on Superior's long.q
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+variable		myid string PEEK0414RxStCrS1
+#--------ForceField--------------
+
+read_data			PEEK0413RxCrStS1.dat
+pair_style			reax/c lmp_control_lg lgvdw yes
+pair_coeff			* * ffield.reax C H O C O
+
+fix 		charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+#--------Settings----------------
+timestep        0.1 #0.1 fs
+variable        Time equal step*dt/1000 #time in picoseconds
+
+#----------Run-------------------
+thermo          2500 #every picosecond
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx ly lz
+log             ${myid}.log.lammps
+dump            1 all atom 2500 ${myid}.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+#Minimize system
+#min_style       cg
+#minimize        1.0e-4 1.0e-6 10000 1000000
+#run				0
+
+#Apply thermostat
+fix             1 all npt temp 3 300 100000 iso 1 1 100000
+run				20000000 #2000 ps
+
+write_restart	${myid}.restart
+write_data		${myid}.dat

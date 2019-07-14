@@ -1,0 +1,106 @@
+#Molecule file for a unit cell of crystalline PEEK, parameters set for OPLS-AA
+
+68 atoms
+5 atom types
+
+bonds
+5 bond types
+
+angles
+7 angle types
+
+dihedrals
+10 dihedral types
+
+#In case I need to do any polymerization
+6 extra bond per atom
+40 extra special per atom
+
+-3 	3 		xlo xhi #length of box in x-direction
+0 	6.8 	ylo yhi #length of box in y-direction
+0 	14.2806 zlo zhi #length of box in z-direction
+
+Masses
+atomic mass
+1 12.0107 # C aromatic
+2 1.00794 # H aromatic
+3 15.9994 # O ether
+4 12.0107 # C ketone
+5 15.9994 # O ketone
+
+Bond Coeffs
+bondtype K r0
+1 469.00 1.4000 #1-1 C:C aro to aro
+2 367.00 1.0800 #1-2 C:H aro c to aro h
+3 450.00 1.3640 #1-3 C:O aro to ether
+4 570.00 1.2290 #1-3 C:O ketone double bond
+5 400.00 1.4900 #1-1 C:C aro to ketone
+
+Angle Coeffs
+angletype K theta0
+1 63.00 120.00 #aro c: aro c: aro c
+2 35.00 120.00 #aro c: aro c: aro H
+3 70.00 120.00 #ether O: aro C: aro C
+4 75.00 111.00 #aro C: ether O: aro C
+5 85.00 120.00 #aro C: ket C: aro C
+6 80.00 120.40 #ket O: ket C: aro C
+7 85.00 120.00 #aro C: aro C: ket C
+
+Dihedral Coeffs
+dihedraltype K1 K2 K3 K4
+1 0.0 7.25 0.0 0.0 #Oe:Ca:Ca:Ca
+2 0.0 7.25 0.0 0.0 #Oe:Ca:Ca:Ha
+3 0.0 7.25 0.0 0.0 #Ca:Ca:Ca:Ca
+4 0.0 7.25 0.0 0.0 #Ca:Ca:Ca:Ha
+5 0.0 7.25 0.0 0.0 #Ha:Ca:Ca:Ha
+6 0.0 5.2 0.0 0.0 #Ca:Ca:Oe:Ca, Guess
+7 0.0 7.25 0.0 0.0 #Ca:Ca:Ca:Ck
+8 0.0 7.25 0.0 0.0 #Ha:Ca:Ca:Ck
+9 0.0 2.1 0.0 0.0 #Ca:Ca:Ck:Ok
+10 0.0 4.9 0.0 0.0 #Ca:Ca:Ck:Ca, Guess
+
+Pair Coeffs
+atomype1 atomtype2 e sigma cutoff
+1 0.0700 3.55 #C aromatic
+2 0.0300 2.42 #H aromatic
+3 0.1400 2.90 #O ether
+4 0.1050 3.75 #C ketone
+5 0.2100 2.96 #O ketone
+
+#The following atoms' ids are based on PEEK_Crystal_Middle.jpg and PEEK_Crystal_Front.jpg
+Atoms
+id molid type x y z
+1	1	1	0.6975 	3.4 1.2081 	#C aromatic, Beginning of middle plane
+2 	1	2	1.2475 	3.4 2.1607 	#H aromatic
+3	1	1	-0.6975 3.4 1.2081 	#C aromatic
+4	1	4	-1.373	3.4	2.3781 	#C ketone
+5	1	5	-2.581	3.4	2.3781 	#O ketone
+6	1	1	-0.6975	3.4	3.5481 	#C aromatic
+7	1	1	0.6975	3.4	3.5481 	#C aromatic
+8	1	2	1.2475	3.4	2.5955 	#H aromatic
+9	1	1	1.395	3.4	4.7562 	#C aromatic
+10	1	2	2.495	3.4	4.7562 	#H aromatic
+11	1	1	-1.395	3.4	4.7562 	#C aromatic
+12	1	2	-2.495	3.4	4.7562 	#H aromatic
+13	1	1	-0.6975	3.4	5.9643 	#C aromatic
+14	1	1	0.6975	3.4	5.9643 	#C aromatic
+15	1	2	-1.2475 3.4 6.9169 	#H aromatic
+16	1	3	1.375	3.4	7.1373 	#O ether
+17	1	1	0.6975	3.4	8.3103	#C aromatic
+18	1	1	-0.6975	3.4	8.3103 	#C aromatic
+19	1	2	-1.2475	3.4	7.3577	#H aromatic
+20	1	1	-1.395	3.4	9.5184 	#C aromatic
+21	1	2	-2.495	3.4	9.5184 	#H aromatic
+22 	1	1	1.395	3.4	9.5184 	#C aromatic
+23	1	2	2.495	3.4	9.5184 	#H aromatic
+24	1	1	0.6975	3.4	10.7265	#C aromatic
+25	1	2	1.2475	3.4	11.6791	#H aromatic
+26 	1	1	-0.6975	3.4	10.7265	#C aromatic
+27	1	3	-1.375	3.4	11.8995	#O ether
+28	1	1	-0.6975	3.4	13.0725	#C aromatic
+29	1	1	-1.395	3.4	14.2806	#C aromatic
+30	1	2	-2.495	3.4	14.2806	#H aromatic
+31	1	1	0.6975	3.4	13.0725	#C aromatic
+32	1	2	1.2475	3.4	12.1199 #H aromatic
+33	1	1	1.395	3.4	14.2806	#C aromatic
+34	1	2	2.495	3.4	14.2806	#H aromatic, End of middle plane

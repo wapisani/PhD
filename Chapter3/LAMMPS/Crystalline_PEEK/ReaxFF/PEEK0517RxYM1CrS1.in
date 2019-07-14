@@ -1,0 +1,100 @@
+#This script will strain the crystalline PEEK sample 1 after a 2 ns startup time and 2 ns equilibration time in ReaxFF. It will be strained in the 1 direction.
+
+#--------input_variables--------- credit for the this script goes to Matt Radue, 
+
+variable        mydata string PEEK0502RxEqCrS1.dat
+variable        myid string PEEK0517RxYM1CrS1
+variable	strain equal 0.20
+variable	strain_rate_s equal 2e8 #in 1/s
+variable	mytimestep equal 0.1
+
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+
+#-----calculated_variables-------
+
+timestep	${mytimestep}
+
+variable        strain_rate_fs equal ${strain_rate_s}*1e-15 # in 1/fs
+variable        totaltime equal ${strain}/${strain_rate_fs} # total time in femtoseconds
+variable        steps equal ${totaltime}/dt
+
+variable        eeng equal time*${strain_rate_fs}
+variable        etrue equal ln(1+v_eeng)
+
+variable	tps equal time/1000
+
+#-----------straining------------
+
+variable	dir equal 1
+
+
+# Deform box
+
+#----------force_field--------- credit for this script goes to Matt Radue
+label start
+
+read_data	${mydata}
+pair_style      reax/c lmp_control_lg lgvdw yes
+pair_coeff      * * ffield.reax C H O C O
+fix             charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+fix		bondorder all reax/c/bonds 200000 ${myid}_${dir}_bonds.reaxc
+
+#------------fixes-------------
+
+if "${dir} == 1" then &
+  "fix          1 all npt temp 300 300 100 y 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 x erate ${strain_rate_fs}"
+if  "${dir} == 2" then &
+  "fix          1 all npt temp 300 300 100 x 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 y erate ${strain_rate_fs}"
+if "${dir} == 3" then &
+  "fix          1 all npt temp 300 300 100 x 1 1 1000 y 1 1 1000" &
+  "fix          2 all deform 1 z erate ${strain_rate_fs}"
+
+#------calculate_strains---------
+
+variable	tmp equal lx
+variable	lx0 equal ${tmp}
+variable        tmp equal ly
+variable        ly0 equal ${tmp}
+variable        tmp equal lz
+variable        lz0 equal ${tmp}
+
+variable	eengx equal (lx-${lx0})/${lx0}
+variable	eengy equal (ly-${ly0})/${ly0}
+variable	eengz equal (lz-${lz0})/${lz0}
+
+#------calculate_stresses--------
+
+compute         p all pressure 1_temp
+variable        sxx equal -0.101325*c_p[1] #in MPa
+variable        syy equal -0.101325*c_p[2] #in MPa
+variable        szz equal -0.101325*c_p[3] #in MPa
+fix             sxx_ave all ave/time 1 2000 2000 v_sxx
+fix             syy_ave all ave/time 1 2000 2000 v_syy
+fix             szz_ave all ave/time 1 2000 2000 v_szz
+
+#------------outputs-----------
+
+thermo_style    custom time v_tps step pe ke temp etotal evdwl press pxx pyy pzz v_etrue v_eengx v_eengy v_eengz v_sxx v_syy v_szz f_sxx_ave f_syy_ave f_szz_ave lx ly lz v_dir vol
+thermo          2000
+log		${myid}_${dir}.log.lammps
+dump            1 all atom 2000 ${myid}_${dir}.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+#------------run--------------
+
+timestep	${mytimestep}
+run		${steps}
+
+#---------wrap up-------------
+
+write_restart   ${myid}_${dir}.restart
+write_data      ${myid}_${dir}.dat
+
+#------------END----------------

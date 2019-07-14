@@ -1,0 +1,106 @@
+#This script will strain the crystalline PEEK sample 1 after a 2 ns startup time and 2 ns equilibration time in ReaxFF. 
+#Changed over to triclinic box, minimized, and then equilibrated at 300 K and 1 atm for 2 ns in ReaxFF.
+#It will be strained in the xy direction to a maximum of 10% engineering strain.
+#This script is a shear strain simulation.
+
+#--------input_variables--------- Most of this script was written by Matt Radue 
+
+variable        mydata string PEEK0715RxShTCrS1.dat
+variable        myid string PEEK0727RxSh1CrS1
+variable	strain equal 0.10
+variable	strain_rate_s equal 2e8 #in 1/s
+variable	mytimestep equal 0.1
+
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+
+#-----calculated_variables-------
+
+timestep	${mytimestep}
+
+variable        strain_rate_fs equal ${strain_rate_s}*1e-15 # in 1/fs
+variable        totaltime equal ${strain}/${strain_rate_fs} # total time in femtoseconds
+variable        steps equal ${totaltime}/dt
+
+variable        eeng equal time*${strain_rate_fs}
+variable        etrue equal ln(1+v_eeng)
+
+#-----------straining------------
+
+variable	dir equal 1
+# dir 1 means xy
+# dir 2 means xz
+# dir 3 means yz
+
+# Deform box
+
+#----------force_field--------- Most of this script was written by Matt Radue 
+
+read_data	${mydata}
+pair_style      reax/c lmp_control_lg lgvdw yes
+pair_coeff      * * ffield.reax C H O C O
+fix             charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+
+
+#------------fixes-------------
+
+if "${dir} == 1" then &
+  "fix          1 all npt temp 300 300 100 xz 1 1 1000 yz 1 1 1000 x 1 1 1000 y 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 xy erate ${strain_rate_fs} flip no"
+if  "${dir} == 2" then &
+  "fix          1 all npt temp 300 300 100 xy 1 1 1000 yz 1 1 1000 x 1 1 1000 y 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 xz erate ${strain_rate_fs} flip no"
+if "${dir} == 3" then &
+  "fix          1 all npt temp 300 300 100 xy 1 1 1000 xz 1 1 1000 x 1 1 1000 y 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 yz erate ${strain_rate_fs} flip no"
+
+#------calculate_strains---------
+#cellgamma, cellbeta, and cellalpha refer to the crystallographic angles
+
+variable	gengxy equal (PI/180*(90-cellgamma))
+variable	gengxz equal (PI/180*(90-cellbeta))
+variable	gengyz equal (PI/180*(90-cellalpha))
+
+#------calculate_stresses--------
+
+compute         p all pressure 1_temp
+variable        sxx equal -0.101325*c_p[1] #in MPa
+variable        syy equal -0.101325*c_p[2] #in MPa
+variable        szz equal -0.101325*c_p[3] #in MPa
+# The below are actually relevant, above is just for a complete picture
+variable        sxy equal -0.101325*c_p[4] #in MPa
+variable        sxz equal -0.101325*c_p[5] #in MPa
+variable        syz equal -0.101325*c_p[6] #in MPa
+# Average the stresses
+fix             sxx_ave all ave/time 1 2000 2000 v_sxx # These used to be 2000
+fix             syy_ave all ave/time 1 2000 2000 v_syy
+fix             szz_ave all ave/time 1 2000 2000 v_szz
+# The below are actually relevant, above is just for a complete picture
+fix             sxy_ave all ave/time 1 2000 2000 v_sxy # These used to be 2000
+fix             sxz_ave all ave/time 1 2000 2000 v_sxz
+fix             syz_ave all ave/time 1 2000 2000 v_syz
+
+#------------outputs-----------
+
+thermo_style    custom time step pe ke temp etotal evdwl press pxy pxz pyz v_gengxy v_gengxz v_gengyz v_sxy v_sxz v_syz f_sxx_ave f_syy_ave f_szz_ave f_sxy_ave f_sxz_ave f_syz_ave lx ly lz xy xz yz cellgamma cellbeta cellalpha v_dir vol density
+thermo          2000 #Used to be 2000
+log		${myid}_${dir}.log.lammps
+dump            1 all atom 2000 ${myid}_${dir}.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+#------------run--------------
+
+timestep	${mytimestep}
+run		${steps}
+
+#---------wrap up-------------
+
+write_restart   ${myid}_${dir}.restart
+write_data      ${myid}_${dir}.dat
+
+#------------END----------------

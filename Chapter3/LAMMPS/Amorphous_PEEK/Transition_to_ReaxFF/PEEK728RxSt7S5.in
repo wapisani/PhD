@@ -1,0 +1,34 @@
+#Starting up the system in ReaxFF, ramping the temp from near absolute zero to 300 K
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+
+#--------ForceField--------------
+
+read_data	Reaxdata7S5.dat
+pair_style	reax/c lmp_control_lg lgvdw yes
+pair_coeff	* * ffield.reax C H O C O C O
+
+fix 		charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+#--------Settings----------------
+timestep        0.1
+variable        Time equal step*dt/1000 #time in picoseconds
+
+#----------Run-------------------
+thermo          500 #every picosecond
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx
+log             PEEK728Rx7S5.log.lammps
+dump            1 all atom 1000 PEEK728Rx7S5.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+fix		1 all nvt temp 0.1 300 10000
+run		1000000 #100 ps
+
+write_restart	PEEK728Rx7S5.restart
+write_data	PEEK728Rx7S5.dat
+
+

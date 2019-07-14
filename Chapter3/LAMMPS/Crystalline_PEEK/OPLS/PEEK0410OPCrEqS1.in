@@ -1,0 +1,36 @@
+#This script will continue where PEEK0405OPCrEqS1.in left off decreasing temp from 300 to 50 and decrease the temperature to around 0.1 K. This script will run for 7 ns using 1 processor.              
+#Total time in OPLS so far: 22 ns
+#---------initialization---------
+
+units 			real
+dimension		3
+boundary		p p p
+atom_style		molecular
+variable        myid string PEEK0410OPCrEqS1
+
+#--------force-field------------
+bond_style      harmonic
+angle_style     harmonic
+dihedral_style  opls
+
+pair_style      lj/cut 10.0
+read_data       PEEK0405OPCrEqS1.dat
+
+#-----------settings------------
+
+timestep        0.1 #0.1 femtosecond
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx ly lz 
+
+#------------run------------
+
+thermo          500 #every picosecond
+log             ${myid}.log.lammps
+dump            1 all atom 500 ${myid}.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+fix             1 all npt temp 50 0.1 10000 iso 1.0 1.0 1000
+run				7000000 #7000 ps
+
+write_restart	${myid}.restart
+write_data		${myid}.dat

@@ -1,0 +1,53 @@
+#This script begins equilibration of the crystalline PEEK sample in ReaxFF after 2 ns of start-up in ReaxFF.
+#This sample has spent 29 ns of equilibration in OPLS. This simulation will attempt to keep the temperature around 300 K and the pressure around 1 atm using NPT with the aniso keyword over 2 ns. Using 4 processors on Superior's long.q
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+variable		myid string PEEK0809RxEqCrS1
+#--------ForceField--------------
+
+read_data			PEEK0414RxStCrS1.dat
+pair_style			reax/c lmp_control_lg lgvdw yes
+pair_coeff			* * ffield.reax C H O C O
+
+fix 		charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+#--------Settings----------------
+timestep        0.1 #0.1 fs
+variable        Time equal step*dt/1000 #time in picoseconds
+
+# Output ReaxFF energies
+compute reax all pair reax/c
+variable eb equal c_reax[1] # bond energy
+variable ea equal c_reax[2] # atom energy
+variable ehb equal c_reax[8] # hydrogen bond energy
+variable et equal c_reax[9] # torsion energy
+variable ew equal c_reax[11] # van der Waals energy
+variable ep equal c_reax[12] # Coulomb energy
+
+#------calculate_stresses--------
+
+compute         p all pressure thermo_temp
+variable        sxx equal -0.101325*c_p[1] #in MPa
+variable        syy equal -0.101325*c_p[2] #in MPa
+variable        szz equal -0.101325*c_p[3] #in MPa
+fix             sxx_ave all ave/time 1 2000 2000 v_sxx
+fix             syy_ave all ave/time 1 2000 2000 v_syy
+fix             szz_ave all ave/time 1 2000 2000 v_szz
+
+
+thermo_style    custom time step pe ke temp etotal evdwl press pxx pyy pzz v_sxx v_syy v_szz f_sxx_ave f_syy_ave f_szz_ave lx ly lz vol v_eb v_ea v_ehb v_et v_ew v_ep
+
+#----------Run-------------------
+thermo          10000 #every picosecond
+log             ${myid}.log.lammps
+dump            1 all atom/gz 200000 ${myid}.lammpstrj.gz #every picosecond
+
+#Apply thermostat
+fix             1 all npt temp 300 300 10000 aniso 1 1 10000
+run		20000000 #2000 ps
+
+write_data	${myid}.dat

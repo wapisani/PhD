@@ -1,0 +1,50 @@
+#This script will change the simulation box from orthogonal to triclinic and then equilibrate the system for 2 ns.
+#2 ns startup time and 2 ns equilibration time in ReaxFF
+
+#-------------------Input_Variables------------------
+
+variable	mydata string PEEK0502RxEqCrS1.dat
+variable	myid string PEEK0715RxShTCrS1 #ShT means transition before shearing
+variable	mytimestep equal 0.1
+
+#-----------------Initialization---------------------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+
+#-----------------Force_Field-----------------------
+
+timestep	${mytimestep}
+
+read_data	${mydata}
+pair_style      reax/c lmp_control_lg lgvdw yes
+pair_coeff      * * ffield.reax C H O C O
+change_box	all triclinic remap	#change box over to triclinic
+fix             charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+
+#------------outputs-----------
+
+thermo_style    custom time step pe ke temp etotal evdwl press lx ly lz xy xz yz cellgamma cellbeta cellalpha vol density
+thermo          5000 #every 500 fs
+log		${myid}.log.lammps
+dump            1 all atom 5000 ${myid}.lammpstrj #every 500 fs
+dump_modify     1 scale no sort id
+
+#-----------------Minimize_and_Equilibrate-----------
+
+min_style       cg
+minimize        1.0e-4 1.0e-6 10000 1000000
+run		0
+fix		1 all npt temp 300 300 1000 iso 1 1 1000
+run 		20000000 #2000 ps
+
+#---------------Save_data----------------------------
+
+write_restart	${myid}.restart
+write_data	${myid}.dat
+
+#--------------------End-----------------------------
+

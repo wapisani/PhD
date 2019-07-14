@@ -1,0 +1,39 @@
+#Allowing the system to relax in ReaxFF for 2 ns
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+atom_style      charge
+
+#--------ForceField--------------
+
+read_data		PEEK728Rx7S3.dat
+pair_style			reax/c lmp_control_lg lgvdw yes
+pair_coeff			* * ffield.reax C H O C O C O
+
+fix 		charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+#--------Settings----------------
+timestep        0.1
+variable        Time equal step*dt/1000 #time in picoseconds
+
+#----------Run-------------------
+thermo          500 #every picosecond
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx
+log             PEEK803RxEq7S3.log.lammps
+dump            1 all atom 1000 PEEK803RxEq7S3.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+fix				1 all npt temp 300 300 10000 iso 1.0 1.0 1000
+run				20000000 #2000 ps, run goes off of the timestep
+
+write_restart	PEEK803RxEq7S3.restart
+write_data	PEEK803RxEq7S3.dat
+
+unfix 			1
+fix				1 all nvt temp 300 300 10000
+fix				2 all ave/spatial 100 1 100 z lower 6 density/mass ave running file PEEK803DPS31dbinz.log
+fix				3 all ave/spatial 100 1 100 x lower 6 density/mass ave running file PEEK803DPS31dbinx.log
+fix				4 all ave/spatial 100 1 100 y lower 6 density/mass ave running file PEEK803DPS31dbiny.log
+run				200

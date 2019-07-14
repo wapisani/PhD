@@ -1,0 +1,54 @@
+# The purpose of this script is to check for residual stresses. NPT at 300 K and 1.0 atm for 100 ps.
+#
+# Simulation history
+# Check PEEK paper for details. This script takes place after the equilibration step in ReaxFF.
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+variable		myid string PEEK0805RxRSCrS1 # RS stands for Residual Stress
+
+#--------force-field------------
+
+atom_style      charge
+read_data       PEEK0502RxEqCrS1.dat
+pair_style      reax/c lmp_control_lg lgvdw yes
+pair_coeff      * * ffield.reax C H O C O
+fix             charges all qeq/reax 1 0.0 10.0 1.0e-6 reax/c
+
+
+
+timestep        0.1
+
+# Output ReaxFF energies
+compute reax all pair reax/c
+variable eb equal c_reax[1] # bond energy
+variable ea equal c_reax[2] # atom energy
+variable ehb equal c_reax[8] # hydrogen bond energy
+variable et equal c_reax[9] # torsion energy
+variable ew equal c_reax[11] # van der Waals energy
+variable ep equal c_reax[12] # Coulomb energy
+
+#------calculate_stresses--------
+
+compute         p all pressure thermo_temp
+variable        sxx equal -0.101325*c_p[1] #in MPa
+variable        syy equal -0.101325*c_p[2] #in MPa
+variable        szz equal -0.101325*c_p[3] #in MPa
+fix             sxx_ave all ave/time 1 2000 2000 v_sxx
+fix             syy_ave all ave/time 1 2000 2000 v_syy
+fix             szz_ave all ave/time 1 2000 2000 v_szz
+
+
+thermo_style    custom time step pe ke temp etotal evdwl press pxx pyy pzz v_sxx v_syy v_szz f_sxx_ave f_syy_ave f_szz_ave lx ly lz vol v_eb v_ea v_ehb v_et v_ew v_ep
+thermo          2000
+log				${myid}.log.lammps
+dump            1 all atom/gz 10000 ${myid}.lammpstrj.gz
+
+fix		1 all npt temp 300 300 100 iso 1 1 100
+
+
+run		1000000 # 100 ps
+
+write_data	${myid}.dat

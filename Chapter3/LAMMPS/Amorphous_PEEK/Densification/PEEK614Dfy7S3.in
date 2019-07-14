@@ -1,0 +1,37 @@
+# The purpose of this script is to densify 125 PEEK monomers to a density of 1.30 g/cc over 7 ns.
+#---------initialization---------
+
+units 		real
+dimension	3
+boundary	p p p
+atom_style	molecular
+
+#--------force-field------------
+bond_style      harmonic
+angle_style     harmonic
+dihedral_style  opls
+
+pair_style      lj/cut 10.0
+read_data       PEEK_model.mol
+replicate 	5 5 5
+
+#-----------settings------------
+
+timestep        1
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx ly lz 
+special_bonds extra 30
+
+#------------run------------
+velocity 	all create 300 48459 rot yes mom yes 
+thermo          1000 #every picosecond
+log             PEEK614Dfy7S3.log.lammps
+dump            1 all atom 1000 PEEK614Dfy7S3.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+fix             1 all nvt temp 300 300 100000
+fix 			2 all deform 1 x erate -0.000000601343 y erate -0.000000601343 z erate -0.000000601343 #box size of 40
+run				1000000 #1000 picoseconds, 1 ns
+unfix			2
+fix 			2 all deform 1 x erate -0.00000001734 y erate -0.00000001734 z erate -0.00000001734 #box size of 35.838386
+run 			6000000 #6000 picoseconds, 6 ns
+write_restart	*PEEK614Dfy7S3.restart

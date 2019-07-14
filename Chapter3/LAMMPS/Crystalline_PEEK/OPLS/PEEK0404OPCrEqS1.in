@@ -1,0 +1,35 @@
+#This script will continue where PEEK0401OPCrStS1.in left off (initialization and NVT at 300 K for 3 ns) and run NPT at 300 K and 1 atm for 12 ns.
+#---------initialization---------
+
+units 			real
+dimension		3
+boundary		p p p
+atom_style		molecular
+variable        myid string PEEK0404OPCrEqS1
+
+#--------force-field------------
+bond_style      harmonic
+angle_style     harmonic
+dihedral_style  opls
+
+pair_style      lj/cut 10.0
+read_data       PEEK0401OPCrStS1.dat
+
+#-----------settings------------
+
+timestep        0.1 #0.1 femtosecond
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx ly lz 
+
+#------------run------------
+
+thermo          500 #every picosecond
+log             ${myid}.log.lammps
+dump            1 all atom 500 ${myid}.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+
+fix             1 all npt temp 300 300 100000 iso 1.0 1.0 1000
+run				12000000 #12000 ps
+
+write_restart	${myid}.restart
+write_data		${myid}.dat

@@ -1,0 +1,30 @@
+#Cooling down the system before switching the system over to ReaxFF
+#---------initialization---------
+
+units 		real
+dimension	3
+boundary	p p p
+atom_style	molecular
+
+#--------force-field------------
+bond_style      harmonic
+angle_style     harmonic
+dihedral_style  opls
+
+pair_style      lj/cut 10.0
+read_restart	PEEK708Ply7S3.restart #14 chains
+
+#-----------settings------------
+
+timestep        1
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx 
+
+#------------run------------
+thermo          1000 #every picosecond
+log             PEEK714NVT7S3.log.lammps
+dump            1 all atom 1000 PEEK714NVT7S3.lammpstrj #every picosecond
+dump_modify     1 scale no sort id
+fix             1 all nvt temp 300 0.1 10000
+run				2000000 #2000 ps
+write_restart	PEEK714NVT7S3.restart
