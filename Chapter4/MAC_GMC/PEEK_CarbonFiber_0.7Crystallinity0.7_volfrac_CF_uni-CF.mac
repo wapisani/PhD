@@ -1,0 +1,17 @@
+MAC/GMC 4.z-3 PEEK 0.7 crystalline 0.7 vol frac CF Uni-dir AS4 CF - Effective Properties
+*CONSTITUENTS
+  NMATS=2
+# -- PEEK results 0.7 crystalline
+  M=1 CMOD=14 MATID=U MATDB=1 &
+   EL=4.49,4.488,4.89 &
+      0.4237,0.4234,0.4233 &
+      1.68,1.679,1.679 &
+      0.0, 0.0, 0.0
+# -- AS4 CF - Properties from Hadden Carbon 2015
+  M=2 CMOD=6 MATID=U MATDB=1 &
+   EL=231,9.6,0.3,0.3,112,0,0
+*RUC
+  MOD=2 ARCHID=13 VF=0.7 R=1 F=2 M=1
+*PRINT
+  NPL=-1
+*END
