@@ -12,6 +12,9 @@ The LAMMPS scripts and data files are organized by chapter and then by methodolo
 ---
 The entirety of chapter 5 has the potential to be [export-controlled](https://www.wikiwand.com/en/International_Traffic_in_Arms_Regulations) someday and so this is a necessary precaution. If I receive notice that chapter 5 can be released to the public, then that directory will be updated with the relevant scripts and data files once the associated journal article has been published. 
 
+Edit (August 2, 2021): Chapter 5 has been published, so I will soon be uploading the relevant molecular structures and LAMMPS scripts here.
+
+
 ## Do I need to learn language Y to use script X?
 ---
 No, but it is **highly, highly, highly recommended to learn Python.** In all likelihood, you will need to modify my Python and R scripts to fit your particular situation. I will not modify them for you.
