@@ -1,0 +1,131 @@
+# The purpose of this script is to test the delamination resistance. kspace yes
+#
+# Simulation history
+# Polymer: densify 100 PEEK monomers (3400 atoms) at a rate of 10 A/ns until a density of 1.30 g/cc is achieved. NVT at 300 K.
+# GNP: Run for 50 ps at 300 K using NVT
+# combine the PEEK and FLCNT and then flatten at a rate of 50 A/ns until the IRoM's density is achieved. NVT at 300 K
+# ramp up the temperature to 500 K over 100 ps (NVT) and then cool down over 4 ns with NVT (50 K/ns cooling rate). Turn on long-range interactions
+# equilibrate the system at 300 K and 1 atm (NPT) over 2 ns.
+# polymerize the system using fix bond/react for 200 ps at 300 K (NVT). Rxn = 161/200 *100% = 80.5%. timestep 1 fs, Rmax = 7 A, Prob 0.0001, stabilize_steps 500
+# ramp up the temperature to 500 K over 100 ps (NVT) and then cool down over 4 ns with NVT (50 K/ns cooling rate).
+#equilibrate the system for 2 ns at 300 K and 1.0 atm (NPT aniso).
+#---------initialization---------
+echo screen
+units           real
+dimension       3
+boundary        p p p
+variable		myid string PEEKG0505PCFFANPlyANDR100 #DR is Delamination Resistance
+
+variable	strain equal 0.80
+variable	strain_rate_s equal 2e8 #in 1/s
+variable	mytimestep equal 1
+variable	dir equal 3 # Z-direction
+#--------force-field------------
+
+atom_style      full
+bond_style      class2
+angle_style     class2
+dihedral_style  class2
+improper_style  class2
+pair_style      lj/class2/coul/long 10.0
+kspace_style pppm 1e-6
+special_bonds	lj/coul 0 0 1
+
+read_data       PEEKG1210PCFFANPlyANEq100.dat
+variable        thermo_freq equal 5000
+variable        dump_freq equal 10*${thermo_freq}
+#--------specify groups-----------
+
+group		lay1 type 9 13
+group		lay2 type 8 12
+group		lay3 type 10 14
+group		lay4 type 11 15
+group		gnp1 union lay1 lay2
+group		gnp2 union lay3 lay4
+group		gnppair union gnp1 gnp2
+group		epx subtract all gnppair
+group		phenyl type 2 7 # phenyl rings are type 2 atoms for PEEK
+group       oxygen type 1 5 6 # oxygen atoms
+group       hydrogen type 3 # hydrogen atoms
+group       ketone_carbon type 4 # ketone carbon atoms
+
+#-----------sim setup----------------
+
+timestep        ${mytimestep} # Might need to be changed
+
+variable        strain_rate_fs equal ${strain_rate_s}*1e-15 # in 1/fs
+variable        totaltime equal ${strain}/${strain_rate_fs} # total time in femtoseconds
+variable        steps equal ${totaltime}/dt
+
+variable        eeng equal time*${strain_rate_fs}
+variable        etrue equal ln(1+v_eeng)
+
+variable	tps equal time/1000
+
+#-----------calculations-------------
+
+#------calculate_strains---------
+
+variable	tmp equal lx
+variable	lx0 equal ${tmp}
+variable        tmp equal ly
+variable        ly0 equal ${tmp}
+variable        tmp equal lz
+variable        lz0 equal ${tmp}
+
+variable	eengx equal (lx-${lx0})/${lx0}
+variable	eengy equal (ly-${ly0})/${ly0}
+variable	eengz equal (lz-${lz0})/${lz0}
+
+#------calculate_stresses--------
+
+compute         p all pressure thermo_temp
+variable        sxx equal -0.101325*c_p[1] #in MPa
+variable        syy equal -0.101325*c_p[2] #in MPa
+variable        szz equal -0.101325*c_p[3] #in MPa
+fix             sxx_ave all ave/time 1 ${thermo_freq} ${thermo_freq} v_sxx
+fix             syy_ave all ave/time 1 ${thermo_freq} ${thermo_freq} v_syy
+fix             szz_ave all ave/time 1 ${thermo_freq} ${thermo_freq} v_szz
+
+# Compute layer distances
+compute		l1com lay1 com
+compute		l2com lay2 com
+compute		l3com lay3 com
+compute		l4com lay4 com
+variable	t12 equal c_l2com[3]-c_l1com[3]
+variable	t23 equal c_l3com[3]-c_l2com[3]
+variable	t34 equal c_l4com[3]-c_l3com[3]
+variable	t41 equal c_l4com[3]-c_l1com[3]
+
+# Compute interaction energies
+compute		epx_gnpp epx group/group gnppair kspace yes
+compute		gnp1_gnp2 gnp1 group/group gnp2 kspace yes
+compute		phenyl_gnp phenyl group/group gnppair kspace yes
+compute     oxy_gnp oxygen group/group gnppair kspace yes
+compute     hyd_gnp hydrogen group/group gnppair kspace yes
+compute     ket_c_gnp ketone_carbon group/group gnppair kspace yes
+
+fix         polygnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_epx_gnpp ave running
+fix			phenylgnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_phenyl_gnp ave running
+fix			oxygnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_oxy_gnp ave running
+fix			hydgnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_hyd_gnp ave running
+fix			ketcgnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_ket_c_gnp ave running
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+
+thermo	${thermo_freq}
+thermo_style	custom step temp press etotal ke pe epair ebond eangle edihed eimp elong c_l1com[3] c_l2com[3] c_l3com[3] c_l4com[3] v_t12 v_t23 v_t34 v_t41 v_etrue v_eengx v_eengy v_eengz v_sxx v_syy v_szz f_sxx_ave f_syy_ave f_szz_ave v_dir lx ly lz pxx pyy pzz vol density c_epx_gnpp c_gnp1_gnp2 c_phenyl_gnp f_polygnp f_phenylgnp f_hydgnp f_ketcgnp f_oxygnp
+log				${myid}.log.lammps
+dump            1 all custom/gz ${dump_freq} ${myid}.lammpstrj.gz x y z type id c_ppa c_kpa # 10 ps
+
+if "${dir} == 1" then &
+  "fix          1 all npt temp 300 300 100 y 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 x erate ${strain_rate_fs}"
+if  "${dir} == 2" then &
+  "fix          1 all npt temp 300 300 100 x 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 y erate ${strain_rate_fs}"
+if "${dir} == 3" then &
+  "fix          1 all nvt temp 300 300 100" &
+  "fix          2 all deform 1 z erate ${strain_rate_fs}"
+
+run		${steps} 

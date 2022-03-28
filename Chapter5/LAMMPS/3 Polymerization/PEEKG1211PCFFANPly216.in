@@ -1,0 +1,86 @@
+# The purpose of this script is to polymerize the system using fix bond/react for 200 ps at 300 K (NVT).
+#
+# Simulation history
+# Polymer: densify 216 PEEK monomers (7344 atoms) at a rate of 10 A/ns until a density of 1.30 g/cc is achieved. NVT at 300 K.
+# GNP: Run for 50 ps at 300 K using NVT
+# combine the PEEK and FLCNT and then flatten at a rate of 50 A/ns until the IRoM's density is achieved. NVT at 300 K
+# ramp up the temperature to 500 K over 100 ps (NVT) and then cool down over 4 ns with NVT (50 K/ns cooling rate). Turn on long-range interactions
+# equilibrate the system at 300 K and 1 atm (NPT) over 2 ns.
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+variable		myid string PEEKG1211PCFFANPly216
+
+#--------force-field------------
+
+atom_style      full
+bond_style      class2
+angle_style     class2
+dihedral_style  class2
+improper_style  class2
+pair_style      lj/class2/coul/long 10.0
+kspace_style pppm 1e-6
+special_bonds	lj/coul 0 0 1
+
+read_data       PEEKG0810PCFFANEq216.dat extra/special/per/atom 20
+
+#--------specify groups-----------
+
+group		lay1 type 9 13
+group		lay2 type 8 12
+group		lay3 type 10 14
+group		lay4 type 11 15
+group		gnp1 union lay1 lay2
+group		gnp2 union lay3 lay4
+group		gnppair union gnp1 gnp2
+group		epx subtract all gnppair
+group		phenyl type 2 # phenyl rings are type 2 atoms for PEEK
+
+#-----------sim setup----------------
+
+#velocity	epx create 300 342131
+
+timestep        1 # Might need to be changed
+
+
+#-----------calculations-------------
+
+# Compute layer distances
+compute		l1com lay1 com
+compute		l2com lay2 com
+compute		l3com lay3 com
+compute		l4com lay4 com
+variable	t12 equal c_l2com[3]-c_l1com[3]
+variable	t23 equal c_l3com[3]-c_l2com[3]
+variable	t34 equal c_l4com[3]-c_l3com[3]
+variable	t41 equal c_l4com[3]-c_l1com[3]
+
+# Compute interaction energies
+compute		epx_gnpp epx group/group gnppair
+compute		gnp1_gnp2 gnp1 group/group gnp2
+compute		phenyl_gnp phenyl group/group gnppair
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+compute         pe_angle all pe/atom angle
+fix         polygnp all ave/time 1 1000 1000 c_epx_gnpp ave running
+fix			phenylgnp all ave/time 1 1000 1000 c_phenyl_gnp ave running
+
+molecule		pre Pre-Rxn-PEEK.moltemp
+molecule		post Post-Rxn-PEEK.moltemp
+
+# Create bonds every 1 ps, hopefully will give enough time to stabilize the system
+fix	1 all bond/react stabilization yes nvt_grp .03 &
+  react pkrxn1 all 1 0 7 pre post map_file_PEEK.txt prob 0.0001 145 stabilize_steps 500
+fix	2 nvt_grp nvt temp 300 300 100 
+fix 3 bond_react_MASTER_group temp/rescale 1 300 300 10 1
+
+thermo	1000	
+thermo_style	custom step temp press etotal ke pe epair ebond eangle edihed eimp elong c_l1com[3] c_l2com[3] c_l3com[3] c_l4com[3] v_t12 v_t23 v_t34 v_t41 lx ly lz pxx pyy pzz vol density c_epx_gnpp c_gnp1_gnp2 c_phenyl_gnp f_polygnp f_phenylgnp f_1[1]
+log				${myid}.log.lammps
+
+dump            1 all custom/gz 10000 ${myid}.lammpstrj.gz x y z type id c_ppa c_kpa c_pe_angle #every 10 ps
+
+run 			200000 #200 picoseconds, 0.2 ns
+write_data 		${myid}.dat

@@ -1,0 +1,96 @@
+# The purpose of this script is to polymerize the system using fix bond/react for 0.2 ns at 300 K (NVT). Rmax 7 A
+#
+# Simulation history
+# Polymer: densify 216 PT monomers at a rate of 10 A/ns until a density of 1.25 g/cc is achieved. NVT at 300 K.
+# GNP: Run for 50 ps at 300 K using NVT
+# combine the PT and FLCNT and then flatten at a rate of 50 A/ns until the IRoM's density is achieved. NVT at 300 K
+# ramp up the temperature to 700 K over 100 ps (NVT) and then cool down over 8 ns with NVT to 300 K(50 K/ns cooling rate). Turn on long-range interactions
+# equilibrate the system at 300 K and 1 atm (NPT) over 2 ns.
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+variable		myid string PTG0313PCFFANPly216
+#--------force-field------------
+
+atom_style      full
+bond_style      class2
+angle_style     class2
+dihedral_style  class2
+improper_style  class2
+pair_style      lj/class2/coul/long 10.0
+kspace_style    pppm 1e-6	
+special_bonds	lj/coul 0 0 1
+
+read_data       PTG0222PCFFANEq216.dat extra/special/per/atom 20
+variable        thermo_freq equal 2000
+variable        dump_freq equal 10*${thermo_freq}
+
+#--------specify groups-----------
+
+group		lay1 type 16 12
+group		lay2 type 15 11
+group		lay3 type 10 14
+group		lay4 type 9 13
+group		gnp1 union lay1 lay2
+group		gnp2 union lay3 lay4
+group		gnppair union gnp1 gnp2
+group		epx subtract all gnppair
+group		phenyl type 1 # Phenyl rings are type 1 atoms for PT
+group       nitrogen type 5 8 # Nitrogen atoms are type 5 and 8
+
+#-----------sim setup----------------
+
+timestep        1 # Might need to be changed
+
+molecule 		pre1 Pre-Rxn-PT_1.moltemp
+molecule		post1 Post-Rxn-PT_1.moltemp
+molecule 		pre2 Pre-Rxn-PT_2.moltemp
+molecule		post2 Post-Rxn-PT_2.moltemp
+molecule 		pre3 Pre-Rxn-PT_3.moltemp
+molecule		post3 Post-Rxn-PT_3.moltemp
+
+#-----------calculations-------------
+
+# Compute layer distances
+compute		l1com lay1 com
+compute		l2com lay2 com
+compute		l3com lay3 com
+compute		l4com lay4 com
+variable	t12 equal c_l2com[3]-c_l1com[3]
+variable	t23 equal c_l3com[3]-c_l2com[3]
+variable	t34 equal c_l4com[3]-c_l3com[3]
+variable	t41 equal c_l4com[3]-c_l1com[3]
+
+# Compute interaction energies
+compute		epx_gnpp epx group/group gnppair kspace yes
+compute		gnp1_gnp2 gnp1 group/group gnp2 kspace yes
+compute		phenyl_gnp phenyl group/group gnppair kspace yes
+compute     nitro_gnp nitrogen group/group gnppair kspace yes
+fix         polygnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_epx_gnpp ave running
+fix			phenylgnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_phenyl_gnp ave running
+fix			nitrognp all ave/time 1 ${thermo_freq} ${thermo_freq} c_nitro_gnp ave running
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+
+thermo	${thermo_freq}	
+thermo_style	custom step temp press pe ke epair ebond eangle edihed eimp elong c_l1com[3] c_l2com[3] c_l3com[3] c_l4com[3] v_t12 v_t23 v_t34 v_t41 lx ly lz pxx pyy pzz vol density c_epx_gnpp c_gnp1_gnp2 c_phenyl_gnp c_nitro_gnp f_polygnp f_phenylgnp f_nitrognp
+log				${myid}.log.lammps
+dump            1 all custom/gz ${dump_freq} ${myid}.lammpstrj.gz x y z type id c_ppa c_kpa
+
+# Minimize the system
+min_style       cg
+minimize        1.0e-4 1.0e-6 10000 1000000
+reset_timestep 0
+
+fix	1 all bond/react stabilization yes nvt_grp .04 &
+  react ptrxn1 all 1 0 7 pre1 post1 map_file_PT_1.txt prob 0.0001 1545 stabilize_steps 500 &
+  react ptrxn2 all 1 0 7 pre2 post2 map_file_PT_2.txt prob 0.01 75 stabilize_steps 500 &
+  react ptrxn3 all 1 0 7 pre3 post3 map_file_PT_3.txt prob 0.1 85 stabilize_steps 500
+fix	2 nvt_grp nvt temp 300 300 100 
+fix 3 bond_react_MASTER_group temp/rescale 1 300 300 10 1
+thermo_style	custom step temp press pe ke epair ebond eangle edihed eimp elong c_l1com[3] c_l2com[3] c_l3com[3] c_l4com[3] v_t12 v_t23 v_t34 v_t41 lx ly lz pxx pyy pzz vol density c_epx_gnpp c_gnp1_gnp2 c_phenyl_gnp c_nitro_gnp f_polygnp f_phenylgnp f_nitrognp f_1[1] f_1[2] f_1[3]
+run 			200000 #200 picoseconds, 0.20 ns
+write_data 		${myid}.dat
+

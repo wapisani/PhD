@@ -1,0 +1,152 @@
+# The purpose of this script is to test the delamination resistance. kspace yes
+#
+# Simulation history
+# Polymer: densify 80 PT monomers at a rate of 10 A/ns until a density of 1.25 g/cc is achieved. NVT at 300 K.
+# GNP: Run for 50 ps at 300 K using NVT
+# combine the PT and FLCNT and then flatten at a rate of 50 A/ns until the IRoM's density is achieved. NVT at 300 K
+# ramp up the temperature to 700 K over 100 ps (NVT) and then cool down over 8 ns with NVT to 300 K(50 K/ns cooling rate). Turn on long-range interactions
+# equilibrate the system at 300 K and 1 atm (NPT) over 2 ns.
+# polymerize the system using fix bond/react for 0.2 ns at 300 K (NVT). Rmax 7 A. R1 = 159, R2 = 143, R3 = 143. xlink = 92.71%
+# ramp up the temperature to 700 K over 100 ps (NVT) and then cool down over 8 ns with NVT to 300 K(50 K/ns cooling rate). 
+# equilibrate the system at 300 K and 1 atm (NPT aniso) over 2 ns.
+#---------initialization---------
+echo screen
+units           real
+dimension       3
+boundary        p p p
+variable		myid string PTG0711PCFFANPlyANDR80 #DR is Delamination Resistance
+
+variable	strain equal 2.0 #strain in decimal, 150% in %
+variable	strain_rate_s equal 2e8 #in 1/s
+variable	mytimestep equal 1
+variable	dir equal 3 # Z-direction
+#--------force-field------------
+
+atom_style      full
+bond_style      class2
+angle_style     class2
+dihedral_style  class2
+improper_style  class2
+pair_style      lj/class2/coul/long 10.0
+kspace_style pppm 1e-6
+special_bonds	lj/coul 0 0 1
+
+read_data       PTG0324PCFFANPlyANEq80.dat
+variable        thermo_freq equal 2000
+variable        dump_freq equal 15*${thermo_freq}
+#--------specify groups-----------
+
+group		lay1 type 16 12
+group		lay2 type 15 11
+group		lay3 type 10 14
+group		lay4 type 9 13
+group		gnp1 union lay1 lay2
+group		gnp2 union lay3 lay4
+group		gnppair union gnp1 gnp2
+group		epx subtract all gnppair
+group		phenyl type 1 # Phenyl rings are type 1 atoms for PT
+group       nitrogen type 5 8 # Nitrogen atoms are type 5 and 8
+group       hydrogen type 6 
+group       carbon_cyanate type 4 7 # Cyanate carbon atoms
+group       carbon type 2 # Non-cyanate carbon atoms
+group       oxygen type 3
+
+#-----------sim setup----------------
+
+timestep        ${mytimestep} # Might need to be changed
+
+variable        strain_rate_fs equal ${strain_rate_s}*1e-15 # in 1/fs
+variable        totaltime equal ${strain}/${strain_rate_fs} # total time in femtoseconds
+variable        steps equal ${totaltime}/dt
+
+variable        eeng equal time*${strain_rate_fs}
+variable        etrue equal ln(1+v_eeng)
+
+variable	tps equal time/1000
+
+#-----------calculations-------------
+
+#------calculate_strains---------
+
+variable	tmp equal lx
+variable	lx0 equal ${tmp}
+variable        tmp equal ly
+variable        ly0 equal ${tmp}
+variable        tmp equal lz
+variable        lz0 equal ${tmp}
+
+variable	eengx equal (lx-${lx0})/${lx0}
+variable	eengy equal (ly-${ly0})/${ly0}
+variable	eengz equal (lz-${lz0})/${lz0}
+
+#------calculate_stresses--------
+
+compute         p all pressure thermo_temp
+variable        sxx equal -0.101325*c_p[1] #in MPa
+variable        syy equal -0.101325*c_p[2] #in MPa
+variable        szz equal -0.101325*c_p[3] #in MPa
+fix             sxx_ave all ave/time 1 ${thermo_freq} ${thermo_freq} v_sxx
+fix             syy_ave all ave/time 1 ${thermo_freq} ${thermo_freq} v_syy
+fix             szz_ave all ave/time 1 ${thermo_freq} ${thermo_freq} v_szz
+
+# Compute layer distances
+compute		l1com lay1 com
+compute		l2com lay2 com
+compute		l3com lay3 com
+compute		l4com lay4 com
+variable	t12 equal c_l2com[3]-c_l1com[3]
+variable	t23 equal c_l3com[3]-c_l2com[3]
+variable	t34 equal c_l4com[3]-c_l3com[3]
+variable	t41 equal c_l4com[3]-c_l1com[3]
+
+# Compute interaction energies
+compute		epx_gnpp epx group/group gnppair kspace yes
+compute		gnp1_gnp2 gnp1 group/group gnp2 kspace yes
+compute		phenyl_gnp phenyl group/group gnppair kspace yes
+compute     nitro_gnp nitrogen group/group gnppair kspace yes
+compute     hydro_gnp hydrogen group/group gnppair kspace yes
+compute     c_cyanate_gnp carbon_cyanate group/group gnppair kspace yes
+compute     carbon_gnp carbon group/group gnppair kspace yes
+compute     oxygen_gnp oxygen group/group gnppair kspace yes
+
+# Compute a running average of the interaction energy computes
+fix         polygnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_epx_gnpp ave running
+fix			phenylgnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_phenyl_gnp ave running
+fix			nitrognp all ave/time 1 ${thermo_freq} ${thermo_freq} c_nitro_gnp ave running
+fix			hydrognp all ave/time 1 ${thermo_freq} ${thermo_freq} c_hydro_gnp ave running
+fix			cyanategnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_c_cyanate_gnp ave running
+fix			carbongnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_carbon_gnp ave running
+fix			oxygengnp all ave/time 1 ${thermo_freq} ${thermo_freq} c_oxygen_gnp ave running
+compute 		ppa all pe/atom
+compute			kpa all ke/atom
+
+thermo	${thermo_freq}
+thermo_style	custom step temp press etotal ke pe epair ebond eangle edihed eimp elong c_l1com[3] c_l2com[3] c_l3com[3] c_l4com[3] v_t12 v_t23 v_t34 v_t41 v_etrue v_eengx v_eengy v_eengz v_sxx v_syy v_szz f_sxx_ave f_syy_ave f_szz_ave v_dir lx ly lz pxx pyy pzz vol density c_epx_gnpp c_gnp1_gnp2 c_phenyl_gnp c_nitro_gnp f_polygnp f_phenylgnp f_nitrognp f_hydrognp f_cyanategnp f_carbongnp f_oxygengnp
+log				${myid}.log.lammps
+dump            1 all custom/gz ${dump_freq} ${myid}.lammpstrj.gz x y z type id c_ppa c_kpa # 10 ps
+
+if "${dir} == 1" then &
+  "fix          1 all npt temp 300 300 100 y 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 x erate ${strain_rate_fs}"
+if  "${dir} == 2" then &
+  "fix          1 all npt temp 300 300 100 x 1 1 1000 z 1 1 1000" &
+  "fix          2 all deform 1 y erate ${strain_rate_fs}"
+if "${dir} == 3" then &
+  "fix          1 all nvt temp 300 300 100" &
+  "fix          2 all deform 1 z erate ${strain_rate_fs}"
+
+variable run_time equal round(${steps}/4)
+
+run		${run_time}
+
+write_data ${myid}_quarter.dat
+
+run     ${run_time}
+
+write_data ${myid}_half.dat
+
+run     ${run_time}
+
+write_data ${myid}_threequarters.dat
+
+run     ${run_time}

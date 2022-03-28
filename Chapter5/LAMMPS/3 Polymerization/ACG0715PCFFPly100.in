@@ -1,0 +1,92 @@
+# The purpose of this script is to continue polymerization for another 100 ps at 300 K (NVT). Minimize the system first
+#
+# Simulation history
+# Polymer: densify 100 AC monomers (3500 atoms) at a rate of 10 A/ns until a density of 1.497 g/cc is achieved. NVT at 300 K.
+# GNP: Run for 50 ps at 300 K using NVT
+# combine the AC and FLCNT and then flatten at a rate of 50 A/ns until the IRoM's density is achieved. NVT at 300 K
+# polymerize the system over 100 ps at 300 K (NVT). Turn on long-range interactions, 133 first stage bonds created, 44 second stage bonds created, 41 third stage bonds created
+#---------initialization---------
+
+units           real
+dimension       3
+boundary        p p p
+variable		myid string ACG0715PCFFPly100
+#--------force-field------------
+
+atom_style      full
+bond_style      class2
+angle_style     class2
+dihedral_style  class2
+improper_style  class2
+pair_style      lj/class2/coul/long 10.0
+kspace_style pppm 1e-6
+special_bonds	lj/coul 0 0 1
+
+read_data       ACG0710PCFFPly100.dat
+
+#--------specify groups-----------
+
+group		lay1 type 17 13
+group		lay2 type 16 12
+group		lay3 type 11 15
+group		lay4 type 10 14
+group		gnp1 union lay1 lay2
+group		gnp2 union lay3 lay4
+group		gnppair union gnp1 gnp2
+group		epx subtract all gnppair
+
+#-----------sim setup----------------
+molecule 		pre1 Pre-Rxn-AC_1.moltemp
+molecule		post1 Post-Rxn-AC_1.moltemp
+molecule 		pre2 Pre-Rxn-AC_2.moltemp
+molecule		post2 Post-Rxn-AC_2.moltemp
+molecule 		pre3 Pre-Rxn-AC_3.moltemp
+molecule		post3 Post-Rxn-AC_3.moltemp
+
+#velocity	epx create 300 342131
+
+timestep        0.1 # Might need to be changed
+
+#-----------calculations-------------
+
+# Compute layer distances
+compute		l1com lay1 com
+compute		l2com lay2 com
+compute		l3com lay3 com
+compute		l4com lay4 com
+variable	t12 equal c_l2com[3]-c_l1com[3]
+variable	t23 equal c_l3com[3]-c_l2com[3]
+variable	t34 equal c_l4com[3]-c_l3com[3]
+variable	t41 equal c_l4com[3]-c_l1com[3]
+
+# Compute interaction energies
+compute		epx_gnpp epx group/group gnppair
+compute		gnp1_gnp2 gnp1 group/group gnp2
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+
+# Compute mass fraction
+compute		1 all property/atom mass
+compute		m_gnp gnppair reduce sum c_1
+compute		m_all all reduce sum c_1 # in grams/mol
+variable	mf equal c_m_gnp/c_m_all
+
+thermo		10000
+log 		${myid}.log.lammps
+# Minimize 
+min_style	cg
+minimize 1.0e-6 1.0e-8 10000 100000
+run	0
+reset_timestep 0
+
+dump            1 all custom/gz 100000 ${myid}.lammpstrj.gz x y z type id c_ppa c_kpa #every 1 ps
+
+fix	1 all bond/react stabilization yes nvt_grp .04 &
+  react acrxn1 all 100000 0 4 pre1 post1 map_file_AC_1.txt prob 0.20 12345 stabilize_steps 100 &
+  react acrxn2 all 150000 0 4 pre2 post2 map_file_AC_2.txt prob 0.60 12345 stabilize_steps 100 &
+  react acrxn3 all 150000 0 4 pre3 post3 map_file_AC_3.txt prob 0.90 12345 stabilize_steps 100
+fix	2 nvt_grp npt temp 300 300 100 iso 1 1 100
+fix 3 bond_react_MASTER_group temp/rescale 1 300 300 10 1
+thermo_style    custom step temp press etotal ke pe ebond eangle edihed evdwl eimp elong density lx ly lz f_1[1] f_1[2] f_1[3] c_epx_gnpp c_gnp1_gnp2
+run 			1000000 #100 picoseconds, 0.10 ns
+write_data 		${myid}.dat

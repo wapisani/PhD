@@ -1,0 +1,129 @@
+# The purpose of this simulation is to densify 294 PEEK monomers (9996 atoms) at a rate of 10 A/ns until a density of 1.30 g/cc is achieved. NVT at 300 K.
+#
+# Simulation History
+# PCFF
+#---------initialization---------
+
+units 		real
+dimension	3
+boundary	f f f
+atom_style	full
+variable    myid string PEEK0622PCFFDfy294
+
+
+#--------force-field------------
+bond_style class2
+angle_style class2
+dihedral_style class2
+improper_style class2
+special_bonds lj/coul 0 0 1
+pair_style lj/class2/coul/cut 10.0 # Change to long after inserting into GNP
+#kspace_style pppm 1e-6
+read_data       PEEK0205OPStS0_PCFF_fixed.dat
+replicate 		7 7 6
+
+
+
+#-----------settings------------
+
+
+# This script assumes that the timestep is 1. Modifications will be needed if it is anything other than 1.
+timestep        1
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe epair ebond eangle edihed eimp elong density lx ly lz 
+
+#Prevent atoms from crossing fixed boundary
+variable xlow equal xlo
+variable xhigh equal xhi
+variable ylow equal ylo
+variable yhigh equal yhi
+variable zlow equal zlo
+variable zhigh equal zhi
+fix				walls all wall/reflect xlo v_xlow xhi v_xhigh ylo v_ylow yhi v_yhigh zlo v_zlow zhi v_zhigh
+
+velocity 		all create 300 49645 rot yes mom yes 
+fix             1 all nvt temp 300 300 100
+run 0 # to get thermo data for the following equations
+
+variable    rho equal 1.30 # density of PEEK in g/cc
+variable    rhoa equal ${rho}/(10^8)^3 # density of PEEK in g/A^3
+variable	lxf equal 100 # final length of simulation box in x-direction
+variable    lyf equal 50 # final length of simulation box in y-direction
+variable    masssys equal $(density/(10^8)^3*lx*ly*lz) # Calculate mass of system in g
+variable	lzf equal ${masssys}/(${rhoa}*${lxf}*${lyf}) # Calculate final length of sim box in z-direction in A
+variable    rate equal $(10/10^6) # Calculate rate of deformation in A/fs
+variable	deltatx equal $((v_lxf-lx)/v_rate) # Calculate time in fs to deform x at the specified rate
+variable    deltaty equal $((v_lyf-ly)/v_rate) # Calculate time in fs to deform y at the specified rate
+variable    deltatz equal $((v_lzf-lz)/v_rate) # Calculate time in fs to deform z at the specified rate
+
+# Define python function to get the absolute max of the three delta ts, the max will be used for the run time
+# This function will be invoked each time the deltatmax variable is evaluated. The format fffi says that the three inputs are floating point
+# and the returned variable is an integer.
+variable    deltatmax python getdeltatmax
+python		getdeltatmax input 3 v_deltatx v_deltaty v_deltatz return v_deltatmax format fffi here """
+def getdeltatmax(tx,ty,tz):
+  tx = abs(tx)
+  ty = abs(ty)
+  tz = abs(tz)
+  deltatmax = max([tx,ty,tz])
+  return round(deltatmax)
+"""
+
+# Invoke Python script to get the runtime
+variable runtime equal ${deltatmax}
+
+# Calculate dump frequency from runtime
+variable dumpfreq equal $(round(v_runtime/10))
+
+# Calculate thermo frequency from runtime
+variable thermofreq equal $(round(v_runtime/200))
+
+# Debugging 
+variable	volume equal vol
+variable    v0 equal ${volume}
+print 'current volume of system is ${v0} A^3'
+print 'mass of system is ${masssys} g'
+print 'lxi = $(lx) A'
+print 'lyi = $(ly) A'
+print 'lzi = $(lz) A'
+print 'lxf = ${lxf} A'
+print 'lyf = ${lyf} A'
+print 'lzf = ${lzf} A'
+print 'deltatx = ${deltatx} fs'
+print 'deltaty = ${deltaty} fs'
+print 'deltatz = ${deltatz} fs'
+print 'The longest delta t is ${runtime} fs'
+print 'strain rate in x-direction is $((v_lxf/lx-1)/v_runtime) A/fs'
+print 'strain rate in y-direction is $((v_lyf/ly-1)/v_runtime) A/fs'
+print 'strain rate in z-direction is $((v_lzf/lz-1)/v_runtime) A/fs'
+
+
+#------------run------------
+
+thermo          ${thermofreq} #every 5 ps
+log             ${myid}.log.lammps
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+
+dump            1 all custom/gz ${dumpfreq} ${myid}.lammpstrj.gz x y z type id fx fy fz c_ppa c_kpa #every 100 ps
+
+# I designed this script so that the rate of deformation is at least 10 Angstroms/nanosecond for all three dimensions.
+# Using a strain rate of 10^-5 A/fs to determine which dimension will require the most time will ensure that 
+# all three dimensions will have a strain rate of at least 10^-5 A/fs.
+# "The final, delta, scale, vel, and erate styles all change the specified dimension of the box via “constant displacement”
+# which is effectively a “constant engineering strain rate”. This means the box dimension changes linearly with time from 
+# its initial to final value." - fix deform lammps documentation
+fix 			2 all deform 1 x final -$(v_lxf/2) $(v_lxf/2) y final -$(v_lyf/2) $(v_lyf/2) z final -$(v_lzf/2) $(v_lzf/2)
+run 			${runtime} #
+write_data 		${myid}.dat
+undump			1
+
+#Run density profile
+unfix			2
+compute x all chunk/atom bin/1d x lower 5 units box
+compute y all chunk/atom bin/1d y lower 5 units box
+compute z all chunk/atom bin/1d z lower 5 units box
+fix 2 all ave/chunk 1000 1 1000 x density/mass file ${myid}_densityprofile_x.txt
+fix 3 all ave/chunk 1000 1 1000 y density/mass file ${myid}_densityprofile_y.txt
+fix 4 all ave/chunk 1000 1 1000 z density/mass file ${myid}_densityprofile_z.txt
+run                1000 # 1 ps

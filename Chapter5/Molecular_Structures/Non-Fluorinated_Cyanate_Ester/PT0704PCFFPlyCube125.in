@@ -1,0 +1,61 @@
+# The purpose of this simulation is to polymerize the system as much as possible.
+#
+# Simulation History
+# PCFF
+# Densified to 1.25 g/cc at a rate of 10 A/ns. Density profiles look normal.
+#---------initialization---------
+
+units 		real
+dimension	3
+boundary	p p p
+atom_style	full
+variable    myid string PT0704PCFFPlyCube125
+
+#--------force-field------------
+bond_style class2
+angle_style class2
+dihedral_style class2
+improper_style class2
+special_bonds lj/coul 0 0 1
+pair_style lj/class2/coul/long 10.0 
+kspace_style pppm 1e-6
+read_data       PT0702PCFFDfyCube125.dat extra/special/per/atom 20
+
+#-----------settings------------
+
+
+timestep        1
+variable        Time equal step*dt/1000 #time in picoseconds
+
+#------------run------------
+molecule 		pre1 Pre-Rxn-PT_1.moltemp
+molecule		post1 Post-Rxn-PT_1.moltemp
+molecule 		pre2 Pre-Rxn-PT_2.moltemp
+molecule		post2 Post-Rxn-PT_2.moltemp
+molecule 		pre3 Pre-Rxn-PT_3.moltemp
+molecule		post3 Post-Rxn-PT_3.moltemp
+
+thermo          1000 #every 0.1 picosecond
+log             ${myid}.log.lammps
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+
+
+# Minimize 
+#min_style	cg
+#minimize 1.0e-6 1.0e-8 10000 100000
+#run	0
+#reset_timestep 0
+velocity 		all create 300 496000 rot no mom no 
+dump            1 all custom/gz 2000 ${myid}.lammpstrj.gz x y z type id c_ppa c_kpa #every 1 ps
+
+fix	1 all bond/react stabilization yes nvt_grp .04 &
+  react acrxn1 all 1 0 5 pre1 post1 map_file_PT_1.txt prob 0.00004 115555 stabilize_steps 500 &
+  react acrxn2 all 1 0 5 pre2 post2 map_file_PT_2.txt prob 0.01 95550 stabilize_steps 500 &
+  react acrxn3 all 1 0 5 pre3 post3 map_file_PT_3.txt prob 0.1 65555 stabilize_steps 500
+fix	2 nvt_grp nvt temp 300 300 100 
+fix 3 bond_react_MASTER_group temp/rescale 1 300 300 10 1
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl eimp density lx ly lz f_1[1] f_1[2] f_1[3]
+run 			200000 #200 picoseconds, 0.20 ns
+write_data 		${myid}.dat
+

@@ -1,0 +1,40 @@
+#The purpose of this script is to minimize the Primaset PT monomer in PCFF so that it can be used in other scripts ready to go.
+#---------initialization---------
+
+units 		real
+dimension	3
+boundary	p p p
+atom_style	full
+variable    myid string PT1221PCFFMono 
+
+#--------force-field------------
+bond_style class2
+angle_style class2
+dihedral_style class2
+improper_style class2
+
+pair_style lj/class2 10.0
+read_data       PT_monomer_PCFF-IFF_fixbondreact.dat
+
+
+#-----------settings------------
+
+timestep        1 #in fs
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe ebond eangle edihed evdwl density lx ly lz 
+#special_bonds extra 30 #For polymerization
+
+#------------run------------
+
+#Perform minimization
+dump 		1 all atom 10 ${myid}_min.lammpstrj #Every 10 steps
+dump_modify	1 scale no sort id
+min_style	cg
+minimize 1.0e-4 1.0e-6 1000 10000
+undump 		1
+reset_timestep	0
+
+# Get monomer into data file
+run 0
+
+write_data		${myid}_ReadyToGo.dat

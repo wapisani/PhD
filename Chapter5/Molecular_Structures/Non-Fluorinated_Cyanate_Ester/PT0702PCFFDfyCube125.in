@@ -1,0 +1,99 @@
+# The purpose of this simulation is to densify 125 PT monomers to a cube at a rate of 10 A/ns until a density of 1.25 g/cc is achieved. NVT at 300 K.
+#
+# Simulation History
+# PCFF
+#---------initialization---------
+echo screen
+units 		real
+dimension	3
+boundary	p p p
+atom_style	full
+variable    myid string PT0702PCFFDfyCube125
+
+
+#--------force-field------------
+bond_style class2
+angle_style class2
+dihedral_style class2
+improper_style class2
+special_bonds lj/coul 0 0 1
+pair_style lj/class2/coul/cut 10.0 
+#kspace_style pppm 1e-6
+read_data       PT1221PCFFMono_ReadyToGo.dat
+replicate 		5 5 5
+
+
+
+#-----------settings------------
+
+
+# This script assumes that the timestep is 1. Modifications will be needed if it is anything other than 1.
+timestep        1
+variable        Time equal step*dt/1000 #time in picoseconds
+thermo_style    custom step v_Time temp press etotal ke pe epair ebond eangle edihed eimp elong density lx ly lz 
+
+velocity 		all create 300 49645 rot yes mom yes 
+fix             1 all nvt temp 300 300 100
+run 0 # to get thermo data for the following equations
+
+variable    rho equal 1.25 # density of PT in g/cc
+variable    rhoa equal ${rho}/(10^8)^3 # density of PT in g/A^3
+variable    masssys equal $(density/(10^8)^3*lx*ly*lz) # Calculate mass of system in g
+variable	lf equal (${masssys}/${rhoa})^(1/3) # Calculate final length of sim box in z-direction in A
+variable    rate equal $(10/10^6) # Calculate rate of deformation in A/fs
+variable	deltatl equal $(round(abs((v_lf-lx)/v_rate))) # Calculate time in fs to deform the length at the specified rate
+
+
+
+
+# Calculate dump frequency from runtime
+variable dumpfreq equal $(round(v_deltatl/20))
+
+# Calculate thermo frequency from runtime
+variable thermofreq equal $(round(v_deltatl/800))
+
+# Debugging 
+variable	volume equal vol
+variable    v0 equal ${volume}
+print 'current volume of system is ${v0} A^3'
+print 'mass of system is ${masssys} g'
+print 'lxi = $(lx) A'
+print 'lyi = $(ly) A'
+print 'lzi = $(lz) A'
+print 'lf = ${lf} A'
+print 'Runtime = ${deltatl} fs'
+print 'strain rate in each direction is $((v_lf/lx-1)/v_deltatl) A/fs'
+
+
+
+#------------run------------
+
+thermo          ${thermofreq} #every 5 ps
+thermo_modify   flush yes
+log             ${myid}.log.lammps
+compute			kpa all ke/atom
+compute 		ppa all pe/atom
+
+dump            1 all custom/gz ${dumpfreq} ${myid}.lammpstrj.gz x y z type id fx fy fz c_ppa c_kpa #every 100 ps, ${dumpfreq}
+dump_modify     1 flush yes
+
+# I designed this script so that the rate of deformation is at least 10 Angstroms/nanosecond for all three dimensions.
+# Using a strain rate of 10^-5 A/fs to determine which dimension will require the most time will ensure that 
+# all three dimensions will have a strain rate of at least 10^-5 A/fs.
+# "The final, delta, scale, vel, and erate styles all change the specified dimension of the box via “constant displacement”
+# which is effectively a “constant engineering strain rate”. This means the box dimension changes linearly with time from 
+# its initial to final value." - fix deform lammps documentation
+fix 			2 all deform 1 x final -$(v_lf/2) $(v_lf/2) y final -$(v_lf/2) $(v_lf/2) z final -$(v_lf/2) $(v_lf/2)
+run 			${deltatl} #
+write_data 		${myid}.dat
+undump			1
+
+#Run density profile
+unfix			2
+compute x all chunk/atom bin/1d x lower 5 units box
+compute y all chunk/atom bin/1d y lower 5 units box
+compute z all chunk/atom bin/1d z lower 5 units box
+fix 2 all ave/chunk 1000 1 1000 x density/mass file ${myid}_densityprofile_x.txt
+fix 3 all ave/chunk 1000 1 1000 y density/mass file ${myid}_densityprofile_y.txt
+fix 4 all ave/chunk 1000 1 1000 z density/mass file ${myid}_densityprofile_z.txt
+run                1000 # 1 ps
